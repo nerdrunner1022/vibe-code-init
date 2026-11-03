@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+set -e
+
+# --- 1. Detect Linux Distribution ---
+if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    DISTRO="$ID"
+    DISTRO_LIKE="$ID_LIKE"
+else
+    DISTRO="unknown"
+    DISTRO_LIKE=""
+fi
+
+echo "[info] Detected distribution: $DISTRO"
+
+# --- 2. Check for Vi, Vim, or Neovim ---
+EDITOR_CMD=""
+if command -v nvim &> /dev/null; then
+    EDITOR_CMD="nvim"
+elif command -v vim &> /dev/null; then
+    EDITOR_CMD="vim"
+elif command -v vi &> /dev/null; then
+    EDITOR_CMD="vi"
+else
+    echo "[info] No editor (vi, vim, neovim) found. Installing Neovim..."
+    
+    # Package manager installation based on distro family
+    if [[ "$DISTRO" =~ ^(ubuntu|debian|pop|mint|linuxmint)$ ]] || [[ "$DISTRO_LIKE" =~ debian ]]; then
+        sudo apt update && sudo apt install -y neovim
+    elif [[ "$DISTRO" =~ ^(arch|manjaro|endeavouros)$ ]] || [[ "$DISTRO_LIKE" =~ arch ]]; then
+        sudo pacman -S --noconfirm neovim
+    elif [[ "$DISTRO" =~ ^(fedora|rhel|centos)$ ]] || [[ "$DISTRO_LIKE" =~ fedora ]]; then
+        sudo dnf install -y neovim
+    elif [[ "$DISTRO" =~ ^(opensuse|sles)$ ]]; then
+        sudo zypper install -y neovim
+    elif [[ "$DISTRO" =~ ^(nixos)$ ]]; then
+        echo "[warning] NixOS detected. Ensure neovim is declared in your system or home configuration."
+    else
+        echo "[error] Unsupported distribution for auto-install. Please install neovim, vim, or vi manually."
+        exit 1
+    fi
+    
+    EDITOR_CMD="nvim"
+fi
+
+# --- 3. Create Project Structure ---
+echo "[info] Setting up vibe-coding folder structure..."
+mkdir -p docs/inbox
+
+# --- 4. Initialize raw.md ---
+RAW_FILE="docs/inbox/raw.md"
+if [ ! -f "$RAW_FILE" ]; then
+    cat << 'EOF' > "$RAW_FILE"
+# Vibe Coding Raw Mind Dump
+
+## Core Vision & Concept
+- What is the app or software? 
+- What problem does it solve in 1-2 sentences?
+
+## User Flow & Vibe
+- How does a user feel when interacting with it?
+- Walk through the primary workflow from scratch.
+
+## Technical Notes & Constraints
+- Stack preferences, APIs, or architectural notes.
+EOF
+    echo "[info] Created $RAW_FILE"
+else
+    echo "[info] $RAW_FILE already exists, leaving intact."
+fi
+
+# --- 5. Open with Markdown Editor or Fallback ---
+OPENED=false
+
+# Check if a graphical environment is active and xdg-open is available
+if command -v xdg-open &> /dev/null && { [ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ]; }; then
+    # Try opening with the system's registered markdown or text editor
+    if xdg-open "$RAW_FILE" &> /dev/null; then
+        OPENED=true
+        echo "[info] Opened $RAW_FILE using the system default markdown editor."
+    fi
+fi
+
+# Fallback to terminal editor if no GUI handler opened it
+if [ "$OPENED" = false ]; then
+    echo "[info] Opening $RAW_FILE with $EDITOR_CMD..."
+    exec $EDITOR_CMD "$RAW_FILE"
+fi
